@@ -1,0 +1,997 @@
+---
+title: "Food Finder"
+author: "Olivia Hughes, Brooke Smith, Charlie Zhou"
+date: "December 16, 2018"
+output: html_document
+---
+#### Overview and Motivation:
+
+As students in our first semester at the Harvard T.H. Chan School of Public Health, we wanted to investigate a topic specific to HSPH that was simple, while also intriguing and applicable to students. Before arriving at HSPH, we were aware of the free lunch offerings from their mention by current students in a prospective student video.  Now as enrolled students, we have first-hand knowledge of the numerous opportunities throughout the week to receive a free lunch. Our experiences attending events, and more specifically those with food, led to curiosity about which characteristics of an event may be predictive of the event offering a free meal.  Additionally, as many of us attending graduate school are financially disabled students, we thought it beneficial to create a resource with simple heuristics to use on any given day that predict the likelihood of an event providing a free lunch. 
+
+
+#### Related Work/Inspiration:
+
+A major benefit of being a Harvard student is having access to free lectures given by world class researchers, politicians, doctors, and professors.  At the Harvard T.H. Chan School of Public Health, a Student News email is sent each day to students detailing upcoming events.  As three new Harvard graduate students, we had heard the constant call to take advantage of these talks.  Not only would we be able to learn about new and exciting things happening in the world of public health, but perhaps we could get a free lunch as well.  Returning students notified us of this perk, as well as it being advertised in many events' description, and even in a video targeting prospective students.   
+
+
+#### Initial Questions:
+
+The question we are first and foremost trying to answer is where and when on campus can students find a free lunch. To do this, we planned to collect information only regarding events accompanied by free meals. Due to data size constraints, however, our question broadened to encompass an analysis of all events on campus, regardless of food offerings.  As such, the final data incorporates levels of free food available, that is, a full meal option versus simply refreshments or other snacks, which we collectively refer to as "snacks".  Subsequently, we explored a variety of other event characteristics. Are they run by student groups or the Harvard institution? Are they on campus or off campus? What time of day are they held? All of this culminated in analysis of the best opportunities to find free food as well as a harder look at the details of the plethora of events hosted by HSPH and beyond. 
+
+
+#### Data:
+
+Our source of data for this project was the daily Student News emails. Each group member was responsible for collecting one third of the data for all the events starting from the first email of the semester until November 30th, 2018. Data collection was broken down into 22 different variables describing location, topic and/or speaker, and additional offerings (e.g. workshop, free lunch, refreshments, etc.).  
+
+```{r} 
+
+#reading in data 
+
+library(readr) 
+
+masterdata <- read_csv("https://raw.githubusercontent.com/OliviaMoriah/Food-Finder/master/BST%20260%20Group%20Project%20-%20Data.csv")
+
+``` 
+
+Once we began working with the data, we noticed errors that would affect analyses i.e. a misspelled weekday, missing event end time, and host information so we performed some data cleaning work to amend for this.. 
+
+```{r echo=FALSE} 
+library(dplyr)
+```
+
+```{r}
+#Check Weekday 
+
+unique(masterdata$Weekday) 
+
+masterdata <- masterdata%>% mutate(Weekday = recode(Weekday, `Thurday`="Thursday")) 
+
+#duration = duration of event, if na then lasts 1 hour 
+
+masterdata <- masterdata %>% mutate(duration=as.numeric(TimeEnd-TimeStart)/60) %>% mutate(duration=ifelse(is.na(duration), 60, duration)) 
+
+```
+
+After data collection and upon the start of our analysis, we realized many variables we collected would be useless in a coding environment so we decided to make new binary variables from existing two-level variables, and changed variables with multiple levels into factors. 
+
+```{r}
+
+## Making Institution and Student binary and coding blanks as "Institution"  
+
+masterdata <- masterdata %>% mutate(instituteyn=ifelse(InstituteVStudent=="Institution"|InstituteVStudent=="institution"|is.na(InstituteVStudent), 1, 0), studentyn=ifelse(InstituteVStudent=="Student"|InstituteVStudent=="student",1,0)) 
+
+#turn food into binary 
+
+masterdata <- masterdata%>%mutate(foodyn=ifelse(Food=="Y"|Food=="y", 1,0))%>% mutate(foodyn=ifelse(!is.na(foodyn), foodyn, 0)) 
+
+#turn snack into binary 
+
+masterdata<- masterdata%>%mutate(snack=ifelse(MealSnake=="snack", 1,0))%>% mutate(snack=ifelse(!is.na(snack), snack, 0)) 
+
+#turn meal into binary 
+
+masterdata<- masterdata%>%mutate(meal=ifelse(MealSnake=="meal", 1,0))%>% mutate(meal=ifelse(!is.na(meal), meal, 0)) 
+
+#turn Workshop into binary 
+
+masterdata <- masterdata%>%mutate(workshopyn=ifelse(Workshop=="Y"|Workshop=="y", 1, 0)) 
+
+#turn Series into binary 
+
+masterdata <- masterdata%>%mutate(seriesyn=ifelse(Series=="Y"|Series=="y", 1, 0)) 
+#turn Open into binary 
+
+masterdata <- masterdata%>%mutate(openyn=ifelse(Open=="Y"|Open=="y", 1, 0)) 
+
+#turn RSVP into binary 
+
+masterdata <- masterdata%>%mutate(RSVPyn=ifelse(RSVP=="Y"|RSVP=="y", 1, 0)) 
+
+#turn Speaker into binary 
+
+masterdata <- masterdata%>%mutate(speakeryn=ifelse(Speaker=="Panel"|Speaker=="panel"|is.na(Speaker)==TRUE, 0, 1)) 
+
+#Creating condensed topic column: FourTopics and making Weekday into factors 
+
+levels(as.factor(masterdata$FourTopics)) 
+
+masterdata$FourTopics <- as.factor(masterdata$FourTopics) 
+
+masterdata$Weekday <- as.factor(masterdata$Weekday) 
+
+levels(masterdata$Weekday) 
+
+#reorder Weekdays 
+
+masterdata$Weekday=factor(masterdata$Weekday, levels=c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")) 
+```
+
+We felt that week of the semester would be an interesting variable to include, so created a variable based on the existing date variable. 
+
+```{r} 
+
+#adding Date as week of the semester 
+
+range(masterdata$Date) 
+
+masterdata <- masterdata %>% mutate(SemesterWeek = ifelse(Date<"2018-12-16", ifelse(Date<"2018-12-09", ifelse(Date<"2018-12-02", ifelse(Date < "2018-11-25", ifelse(Date<"2018-11-18", ifelse(Date<"2018-11-11", ifelse(Date<"2018-11-04", ifelse(Date<"2018-10-28", ifelse(Date<"2018-10-21", ifelse(Date<"2018-10-14", ifelse(Date<"2018-10-07", ifelse(Date<"2018-09-30", ifelse(Date<"2018-09-23", ifelse(Date<"2018-09-16", ifelse(Date<"2018-09-09", ifelse(Date<"2018-09-02", 0, 1), 2), 3), 4), 5), 6), 7), 8), 9), 10), 11), 12), 13), 14), 15), 16)) 
+```
+ 
+
+#### Exploratory Analysis: 
+
+In our intial analysis, we made use of methods for observing our descriptive statistics using histograms and simple proportions. Below a multitude of statistics are explored using our original data. Some we felt were not as compelling or suffered from a dearth of data, i.e. in the list of speakers at events. Once we found the statistics that we felt would be the most useful, relevant, and interesting to food event prediction for students, we used more sophisticated methods for evaluating this data using RShiny and ggplot2.
+
+
+```{r} 
+library(ggplot2)
+
+##Underlying question: WHICH LEVELS OF EACH VARIABLE HAVE MORE FOOD? 
+
+#descriptive stats regarding Speaker-about 50% of events with a speaker have food
+
+foodprop_speaker <- masterdata %>% group_by(speakeryn) %>% summarise(propfoodevents = sum(foodyn==1)/n()) 
+
+#descriptive stats regarding Workshop - about 50% of events considered a workshop have food 
+
+foodprop_workshop <- masterdata %>% group_by(workshopyn) %>% summarise(propfoodevents = sum(foodyn==1)/n()) 
+
+#descriptive stats regarding Topic (in 5 categories) 
+
+numtopic <- masterdata %>% group_by(FourTopics) %>% summarise(number_of_events = n()) 
+
+proptopic <- masterdata %>% group_by(FourTopics) %>% summarise(number_of_events = n()/270) 
+
+#about half of all events are "academic"
+
+foodprop_topic <- masterdata %>% group_by(FourTopics) %>% summarise(propfoodevents = sum(foodyn==1)/n()) 
+
+#Just under half of academic and welfare events have food 
+
+#Just under half of social and career events have food 
+
+#all religious events have food (although there are only 7 events in this category)
+
+masterdata %>% filter(foodyn==1) %>% ggplot() + geom_bar(aes(FourTopics)) 
+
+#yes, academic has the most food events, but it also has the most events in general 
+
+``` 
+
+```{r} 
+
+### LOOKING AT WEEK OF THE SEMESTER 
+
+#proportion of events by week 
+
+masterdata %>% group_by(SemesterWeek) %>% summarise(propev = n()) 
+
+#the 2nd to middle week of the semester has the most events 
+
+#proportion of food events by week 
+
+masterdata %>% group_by(SemesterWeek) %>% summarise(propfood = sum(foodyn==1)/n()) 
+
+#from the 5th week on, over half of a week's events provide some sort of food 
+
+#proportion of meal events by week 
+
+masterdata %>% group_by(SemesterWeek) %>% summarise(propmeal = sum(meal==1)/n()) 
+
+#the 9th week of the semester (1st week of Fall 2), is the week with the highest proportion of meal events 
+
+masterdata %>% group_by(SemesterWeek) %>% summarise(nmeal = sum(meal==1)) 
+
+#weeks 5-9 have the highest number of meals offered from 7 to 9 meals per week 
+
+``` 
+
+
+```{r} 
+
+#creating a data frame for rshiny plots looking at the number of food events on a weekday in a specific week 
+
+numfood_by_semweek <- masterdata %>% filter(foodyn==1) %>% group_by(SemesterWeek) %>% summarise(Monday = sum(Weekday=="Monday"), Tuesday = sum(Weekday=="Tuesday"), Wednesday = sum(Weekday=="Wednesday"), Thursday = sum(Weekday=="Thursday"), Friday = sum(Weekday=="Friday"), Saturday = sum(Weekday=="Saturday")) 
+
+#flipping rows and columns 
+
+numfood_by_semweek_flip <- data.frame(t(numfood_by_semweek[-1])) 
+
+#renaming Columns (note: week 0, 12, 15 had no food events) 
+
+colnames(numfood_by_semweek_flip) <- c("Week 1","Week 2","Week 3","Week 4","Week 5","Week 6","Week 7","Week 8","Week 9","Week 10","Week 11","Week 13","Week 14") 
+
+rows <- rownames(numfood_by_semweek_flip) 
+
+rows <- factor(rows, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) 
+
+``` 
+
+```{r echo= FALSE} 
+
+library(shiny) 
+
+library(shinyWidgets) 
+
+library(ggplot2) 
+```
+```{r}
+
+ui <- fluidPage(     
+  
+
+  # Give the page a title 
+
+  titlePanel("Food Events by Day of the Week and Week of the Semester"), 
+
+   
+
+  # Generate a row with a sidebar 
+
+  sidebarLayout(       
+
+     
+
+    # Define the sidebar with one input 
+
+    sidebarPanel( 
+
+      sliderTextInput("week", "Week:", choices=colnames(numfood_by_semweek_flip), animate = TRUE), 
+
+      hr(), 
+
+      helpText("Note: Weeks 0, 12, 15 had no events")), 
+
+     
+
+    # Create a spot for the barplot 
+
+    mainPanel( 
+
+      plotOutput("propPlot")) 
+
+  ) 
+
+) 
+
+ 
+
+server <- # Define a server for the Shiny app 
+
+  function(input, output) { 
+
+     
+
+    # Fill in the spot we created for a plot 
+
+    output$propPlot <- renderPlot({ 
+
+       
+
+      # Render a barplot 
+
+      ggplot() + geom_col(aes(x = rows, y = numfood_by_semweek_flip[,input$week])) + xlab("") + ylab("Number of Food Events") + scale_y_continuous(limits = c(0, 10)) 
+
+    }) 
+
+  } 
+
+ 
+shinyApp(ui=ui,server=server) 
+
+``` 
+
+
+```{r echo=FALSE}     
+
+library(tidyverse)     
+
+library(readr)     
+
+library(readxl)     
+
+library(lubridate)     
+
+library(dplyr)     
+
+library(ggplot2) 
+
+library(gridExtra)
+
+```   
+ 
+
+```{r}     
+
+#Bulk exploratory analysis
+
+a<-masterdata%>% summarize(total_events=n(), events_with_food=sum(foodyn), events_with_snack=sum(snack), events_with_meal=sum(meal), proportion_total=n()/n(), proportion_with_food=sum(foodyn)/n(), proportion_with_snack=sum(snack)/n(), proportion_with_meal=sum(meal)/n()) 
+
+##Total number analysis 
+
+total_number<-a %>% select(-proportion_total, -proportion_with_food, -proportion_with_meal, -proportion_with_snack) %>% gather(variable, value, total_events, events_with_food, events_with_snack, events_with_meal) 
+
+total_number$variable=factor(total_number$variable, levels=c("total_events", "events_with_food", "events_with_meal", "events_with_snack")) 
+
+total_number<-total_number%>%mutate(variable = recode(variable, `total_events`="Total", `events_with_food` = "Food", `events_with_meal`="Meal", `events_with_snack`="Snack"))     
+
+##Proportion analysis 
+
+total_proportion<- a %>% select(-total_events, -events_with_food, -events_with_snack, -events_with_meal) %>% gather(variable, value, proportion_total, proportion_with_food, proportion_with_meal, proportion_with_snack) 
+
+total_proportion$variable=factor(total_proportion$variable, levels=c("proportion_total", "proportion_with_food", "proportion_with_meal", "proportion_with_snack")) 
+
+total_proportion<-total_proportion%>%mutate(variable = recode(variable, `proportion_total`="Total", `proportion_with_food` = "Food", `proportion_with_meal`="Meal", `proportion_with_snack`="Snack")) 
+
+``` 
+
+
+```{r} 
+
+library(ggthemes)
+
+#Bulk Analysis Final 
+
+a2<-masterdata%>% summarize(total_events=n(), events_with_food=sum(foodyn), events_with_snack=sum(snack), events_with_meal=sum(meal), no_food=n()-sum(foodyn), proportion_total=n()/n(), proportion_with_food=sum(foodyn)/n(), proportion_with_snack=sum(snack)/n(), proportion_with_meal=sum(meal)/n(), proportion_no_food=(n()-sum(foodyn))/n()) 
+
+ total_proportion2<- a2 %>% select(-total_events, -events_with_food, -events_with_snack, -events_with_meal, no_food) %>% gather(variable, value, proportion_total, proportion_with_food, proportion_with_meal, proportion_with_snack, proportion_no_food) 
+
+total_proportion2$variable=factor(total_proportion2$variable, levels=c("proportion_total", "proportion_with_food", "proportion_with_meal", "proportion_with_snack", "proportion_no_food")) 
+
+total_proportion2<-total_proportion2%>%mutate(variable = recode(variable, `proportion_total`="Total", `proportion_with_food` = "Food", `proportion_with_meal`="Meal", `proportion_with_snack`="Snack", `proportion_no_food`="No Food")) 
+
+
+# Bar chart depicting the proportion of events with food   
+
+total_proportion2 %>% filter(variable!="Total"& variable!="Food") %>% arrange(value) %>% ggplot(aes(variable, value,fill=variable)) + 
+
+  geom_bar(stat="identity", alpha=0.75) + 
+
+  theme(legend.position="none") + 
+
+  theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+
+   scale_color_economist()+
+ scale_fill_manual(values=c("greenyellow", "seagreen2", "firebrick3"))+
+
+  xlab ("")+ 
+
+  ylab ("")+ 
+
+  ggtitle("Events and Food Status by Proportion") 
+
+``` 
+
+The above graph represents the proportion of events without food, with meal, or with snack.
+
+```{r} 
+
+#Weekday analysis exploratory  
+
+masterdata$Weekday=factor(masterdata$Weekday, levels=c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday")) 
+
+weekday_analysis<-masterdata %>% group_by(Weekday) %>% summarize(events_on_day=n(), food_on_day=sum(foodyn), proportion_with_food=mean(foodyn), snack_on_day=sum(snack), proportion_with_snack=mean(snack), meal_on_day=sum(meal), proportion_with_meal=mean(meal))     
+
+
+weekday_analysis<-weekday_analysis %>% select(-events_on_day, -food_on_day, -snack_on_day, -meal_on_day) %>% filter(Weekday== c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))%>% gather(Variable, Value, proportion_with_food, proportion_with_snack, proportion_with_meal) %>% arrange(Weekday)
+
+  
+levels(weekday_analysis$Weekday)
+
+weekday_analysis %>% ggplot(aes(Weekday, Value, fill=Variable))+ 
+
+  geom_bar(position="dodge", stat="identity", alpha=0.75)+ 
+
+  theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+
+  scale_fill_manual(values=c("cornflowerblue", "greenyellow", "seagreen2"), name="", labels=c("Food", "Meal", "Snack"))+ 
+
+  xlab ("")+ 
+
+  ylab ("")+ 
+
+  ggtitle("Probability of Food by Weekday") 
+
+
+
+``` 
+
+Exploratory graph of the proportion of events with food, with meals, and with snacks by day of the week.
+
+```{r} 
+
+#Weekday analysis final  
+
+weekday_analysis2<-masterdata %>% group_by(Weekday) %>% summarize(total_events=n(), events_with_food=sum(foodyn), events_with_snack=sum(snack), events_with_meal=sum(meal), no_food=n()-sum(foodyn), proportion_total=n()/n(), proportion_with_food=sum(foodyn)/n(), proportion_with_snack=sum(snack)/n(), proportion_with_meal=sum(meal)/n(), proportion_no_food=(n()-sum(foodyn))/n()) 
+
+
+weekday_analysis2a<-weekday_analysis2 %>% select(-total_events, -events_with_food, -events_with_snack, -events_with_meal, -no_food) %>% filter(Weekday== c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))%>% gather(Variable, Value, proportion_total, proportion_with_food, proportion_with_snack, proportion_with_meal, proportion_no_food) %>% arrange(Weekday) 
+
+  
+weekday_analysis2a$Variable=factor(weekday_analysis2a$Variable, levels=c("proportion_total", "proportion_with_food", "proportion_with_meal", "proportion_with_snack", "proportion_no_food")) 
+
+  
+weekday_analysis2a %>% filter(Variable!="proportion_total" & Variable!="proportion_with_food") %>% ggplot(aes(Weekday, Value, fill=Variable))+ 
+
+  geom_bar(position="dodge", stat="identity", alpha=0.75)+ 
+
+  theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+
+  scale_fill_manual(values=c("greenyellow", "seagreen2", "firebrick3"),name="", labels=c("Meal", "Snack", "No food"))+ 
+
+  xlab ("")+ 
+
+  ylab ("")+ 
+
+  ggtitle("Probability of Food by Weekday") 
+
+``` 
+
+Depiction of the proportion of events without food, with meal and with snacks by day of the week.  
+
+```{r} 
+
+#Weekday number analysis final 
+
+weekday_analysis2 
+
+weekday_analysis2b<-weekday_analysis2 %>% select(Weekday, events_with_snack, events_with_meal, no_food) %>% filter(Weekday== c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))%>%gather(Variable, Value, events_with_snack, events_with_meal, no_food) %>% arrange(Weekday) 
+
+weekday_analysis2b$Variable=factor(weekday_analysis2b$Variable, levels=c("events_with_snack", "events_with_meal", "no_food")) 
+
+ weekday_analysis2b %>% ggplot(aes(Weekday, Value, fill=Variable))+ 
+
+  geom_bar(position="dodge", stat="identity", alpha=0.75)+ 
+
+  theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+
+  scale_fill_manual(values=c("greenyellow", "seagreen2", "firebrick3"), name="", labels=c("Meal", "Snack", "No food"))+ 
+
+  xlab ("")+ 
+
+  ylab ("")+ 
+
+  ggtitle("Events by Weekday") 
+
+``` 
+
+Number of events without food, with snacks and with meals by day of the week. 
+
+```{r} 
+
+#Start Time Analysis by Day 
+
+
+masterdata<-masterdata%>%mutate(foodynfactor=as.factor(foodyn)) 
+
+masterdata %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"), name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("All") 
+
+``` 
+
+Probability distribution of events and of food at those events by start time of the event across all days.
+
+```{r} 
+
+masterdata%>% filter(Weekday=="Monday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Monday") 
+
+  
+
+ggsave("Monday.png", scale=0.7, dpi=300) 
+
+  
+
+masterdata%>% filter(Weekday=="Tuesday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Tuesday") 
+
+  
+
+ggsave("Tuesday.png", scale=0.7, dpi=300) 
+
+  
+
+masterdata%>% filter(Weekday=="Wednesday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Wednesday") 
+
+  
+
+ggsave("Wednesday.png", scale=0.7, dpi=300) 
+
+  
+
+masterdata%>% filter(Weekday=="Thursday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Thursday") 
+
+  
+
+ggsave("Thursday.png", scale=0.7, dpi=300) 
+
+            
+
+masterdata%>% filter(Weekday=="Friday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + scale_color_economist()+ 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Friday") 
+
+  
+
+ggsave("Friday.png", scale=0.7, dpi=300) 
+
+  
+
+masterdata%>% filter(Weekday=="Saturday") %>% ggplot(aes(as.numeric(TimeStart), fill=foodynfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1, position="stack")+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  theme(axis.text.x=element_text(size=5))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="Food Status", labels=c("No", "Yes")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Saturday") 
+
+  
+
+ggsave("Saturday.png", scale=0.7, dpi=300) 
+
+``` 
+
+Probability distribution of events and of food at those events by start time of the event by weekday. This will produce graphs that will be used for an R shiny animation.
+
+```{r}     
+#needed for rshiny
+path <-getwd()
+```  
+
+```{r} 
+
+#R shiny 
+
+library(shiny) 
+
+library(shinyWidgets) 
+
+  
+
+ui <- fluidPage( 
+
+  sliderTextInput("Weekday", "Day of the Week:", choices=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"),selected = c("Monday"), animate = TRUE, grid = TRUE, hide_min_max = TRUE, from_fixed = FALSE,to_fixed = FALSE, from_min = NULL, from_max = NULL, to_min = NULL,to_max = NULL, force_edges = FALSE, width = 1000, pre = NULL,post = NULL, dragRange = TRUE), 
+
+  plotOutput("graph")) 
+
+  
+
+values <- reactiveValues("Monday" = "Monday.png", "Tuesday"="Tuesday.png", "Wednesday"="Wednesday.png", "Thursday"="Thursday.png", "Friday" = "Friday.png", "Saturday"="Saturday.png") 
+
+  
+
+paste('red', 'dead', sep='') 
+
+paste('weekday', '.png', sep='') 
+
+  
+
+  
+
+server <- function(input, output) { 
+
+  output$graph <- renderImage ({ 
+
+    list(src= 
+
+    file.path(path, paste(input$Weekday, '.png', sep=''))) 
+
+  }, deleteFile=FALSE) 
+
+} 
+
+  
+
+shinyApp(ui=ui,server=server) 
+
+  
+
+``` 
+
+R shiny animation/interactive slider of probability distribution graphs of events and food at those events.
+
+Takeaway - Bimodal peak - lunchtime and late afternoon/evening 
+
+```{r} 
+#Snack vs Meal over Time 
+
+masterdata<-masterdata%>%mutate(mealfactor=as.factor(meal)) 
+
+ 
+masterdata %>% filter(foodyn==1) %>% ggplot(aes(as.numeric(TimeStart), fill=mealfactor))+ 
+
+  geom_density(alpha=0.5, adjust=1)+ 
+
+  scale_x_continuous(limits=c(as.numeric(hms("06:00:00")),as.numeric(hms("22:00:00"))), breaks=seq(21600, 79200, 3600), labels= c("6AM", "7AM", "8AM", "9AM", "10AM", "11AM", "12PM", "1PM", "2PM", "3PM", "4PM", "5PM", "6PM", "7PM", "8PM", "9PM", "10PM"))+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"), name="Food Type", labels=c("Snack", "Meal")) + 
+
+  scale_y_continuous(labels = NULL) + 
+
+  theme(panel.background = element_blank(), panel.grid.major.y = element_blank())+ scale_color_economist()+ 
+
+  xlab("")+ 
+
+  ylab("")+ 
+
+  ggtitle("Food Type by Time of Day") 
+
+``` 
+
+Distribution of meals and snacks by start time of the event.
+
+Takeaway - meals happen at mealtimes, and snacks happen throughout afternoon - pretty stable 
+
+```{r} 
+
+#By calendar date 
+
+calendar_date<-masterdata%>%group_by(Date) %>% summarize(events=n(), food=sum(foodyn)) 
+
+all_dates_in_range <- data.frame (Date= seq.Date(min(calendar_date$Date), max(calendar_date$Date), by="day")) 
+
+calendar_date<-left_join (all_dates_in_range, calendar_date, by="Date") 
+
+calendar_date<-calendar_date%>%mutate(events=ifelse(is.na(events), 0, events), food=ifelse(is.na(food), 0, food)) 
+
+calendar_date<-calendar_date%>%gather(variable, value, events, food)%>%arrange(Date) 
+
+  
+
+sundays<-seq(as.Date("2018/8/26"), as.Date("2018/12/12"), by = "week") 
+
+sundays<-as.data.frame(sundays) 
+
+  
+
+calendar_date%>%ggplot(aes(Date, value, fill=variable)) +  
+
+  geom_area(alpha=0.5)+ 
+
+  geom_vline(data=sundays, aes(xintercept=sundays), linetype="dashed")+ 
+
+  scale_fill_manual(values=c("orangered2","cornflowerblue"),name="", labels=c("Events", "Food")) + 
+scale_color_economist()+ 
+  ylab("")+ 
+
+  xlab("")+ 
+
+  ggtitle("Events by Calendar Date") 
+
+  
+
+```   
+
+Number of events and events with food by calendar date.
+
+No events over Thanksgiving or on Sundays (denoted by dotted lines).
+
+```{r} 
+
+## Who more likely to host event? - Proportion of events school vs. institution 
+
+## Institution more likely to host with 72.5% of events 
+
+inst_v_school <- masterdata %>% summarize(Institute=sum(instituteyn, na.rm=T)/n(), Student=sum(studentyn, na.rm=T)/n()) 
+
+##Whose events more likely to have food? 
+## Institute with 66% 
+
+inst_v_school_food <- masterdata %>% filter(foodyn==1) %>% summarize(Inst_food_prop = sum(instituteyn, na.rm = T)/n(), Student_food_prop=sum(studentyn, na.rm = T)/n()) 
+
+``` 
+
+
+```{r warning=FALSE} 
+
+library(stringr) 
+
+## Converting location to a vector to allow for string processing 
+
+newvec <- c(masterdata$Location) 
+
+## Data frame specific to locations 
+## Using string processing to pull out building location of the event based on Location listed in our spreadsheet 
+
+event_df <- masterdata %>% select(ID, Location, foodyn, snack,meal) %>%mutate(Kresge = ifelse(str_detect(newvec, "Kresge"),1,0), Countway = ifelse(str_detect(newvec, "Countway"),1,0), FXB=ifelse(str_detect(newvec,"FXB"),1,0), Leadership = ifelse(str_detect(newvec, "Leadership"),1,0), ODI=ifelse(str_detect(newvec,"ODI"),1,0)) 
+
+##Kresge total events - 121 events 
+
+sum(event_df$Kresge, na.rm = T) 
+
+## Total HSPH campus events 
+
+sum(event_df$Kresge + event_df$Countway + event_df$FXB + event_df$Leadership + event_df$ODI, na.rm = TRUE) 
+
+
+## adding off-campus  and "other"" event column 
+
+event_df <- event_df %>% mutate(PHOffcampus = ifelse((Kresge==1 | Countway==1 | ODI==1 | Leadership==1 | FXB==1), 0, 1), OtherHSPH = ifelse((ODI==1 | Leadership==1), 1, 0))  
+
+## Condensing events to format readable for ggplot 
+
+event_df_condensed <- event_df %>% select(Kresge, Countway, FXB, PHOffcampus, OtherHSPH) %>% gather(Building, value, Kresge, Countway, OtherHSPH, FXB, PHOffcampus) 
+
+## Bar chart of all event locations 
+
+BC_EL <-event_df_condensed %>% arrange(value) %>% ggplot(aes(Building, value,fill=Building)) + 
+
+geom_bar(stat="identity") + 
+
+theme(legend.position="none") + 
+  theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+
+  scale_fill_economist()+
+
+  xlab("")+ 
+
+ylab ("Number of Events")+ 
+
+  scale_x_discrete(labels=c("Countway", "FXB", "Kresge", "Other HSPH", "Off-campus"))+ scale_color_economist()+ 
+
+ggtitle("Event Location Distribution") 
+
+
+## Number of events at each location with food                                  
+
+food_events <- event_df %>% mutate(KresgeFood=ifelse(Kresge==1 & foodyn==1, 1, 0), OtherFood=ifelse(ODI==1 | Leadership==1 & foodyn==1, 1, 0), CountwayFood=ifelse(Countway==1 & foodyn==1,1,0), FXBFood=ifelse(FXB==1 & foodyn==1,1,0), PHOffcampusFood=ifelse(PHOffcampus==1&foodyn==1,1,0)) 
+
+
+## Condensing events to format readable for ggplot 
+
+food_events_condensed <- food_events %>% select(KresgeFood, OtherFood,CountwayFood, FXBFood, PHOffcampusFood) %>% gather(Building, value, KresgeFood, OtherFood,CountwayFood, FXBFood, PHOffcampusFood) 
+ 
+
+## Bar chart of food event locations 
+
+BC_FD <-food_events_condensed %>% arrange(value) %>% ggplot(aes(x=Building,y=value, fill=Building)) + 
+
+geom_histogram(stat="identity") + 
+
+theme(legend.position="none") + 
+
+theme(axis.text.x=element_text(face="bold", size=12), axis.text.y=element_text(face="bold", size=12))+ 
+    scale_fill_economist()+
+  xlab("")+ 
+
+ylab ("Number of Events")+ 
+
+scale_x_discrete(labels=c("Countway", "FXB", "Kresge", "Other HSPH", "Off-campus")) + scale_color_economist()+ ylim(0, 115) +
+
+ggtitle("Event with Food Location Distribution") 
+
+grid.arrange(BC_EL, BC_FD)
+
+``` 
+
+     
+
+#### Final Analysis:
+
+Major takeaways from our data analysis are as follows:
+Our final analysis showed us that approximately 50% of events offered free food. Of these events, unsurprisingly, your best chance of getting a full meal at HSPH is during the lunch period from 12:00pm to 2:00pm and the dinner period from 5:00 to 8:00pm. Peak snack availability was in between these two time frames. 
+
+It follows that the best day of the week to get free food of any kind is on Thursday, while the best day to get a free meal is on Wednesday. The week during the semester with the most abundant selection of free food is the first week of the Fall 2 quarter. Finally, the prime location to find free food is in the Kresge building.
+
+We answered these questions through use of histograms and density graphs using ggplot2 and RShiny. After our analysis we went on to model our data using logistic regression with the likelihood of free food as our outcome of interest. With only 270 data points in our sample, we kept our model simple using only categorical time of day and categorical location as are our predictors of interest. The results of our model are below and show largely inconclusive data due in large part to limited sample size. Nevertheless, we attempted to create a predictive model from our data set by dividing it into a training and testing set with an 80/20 split. Our final model yields accuracy results of 60% and sensitivity and specificity at 69% and 50%, respectively. These results are lower than we would hope, but under our framework for predictive modeling, we do not have the statistical power necessary for a strong model.
+  
+
+```{r} 
+
+#logistic regression 
+
+statistics <-masterdata %>% select(ID, TimeStart, foodynfactor) %>% mutate(preten=ifelse(TimeStart<as.numeric(hms("10:00:00")), 1, 0), tentotwelve=ifelse(TimeStart>=as.numeric(hms("10:00:00")) & TimeStart<as.numeric(hms("12:00:00")), 1, 0), twelvetotwo=ifelse(TimeStart>=as.numeric(hms("12:00:00")) & TimeStart<as.numeric(hms("14:00:00")), 1, 0), twotofour=ifelse(TimeStart >= as.numeric(hms("14:00:00")) & TimeStart<as.numeric(hms("16:00:00")), 1, 0), fourtosix=ifelse(TimeStart>=as.numeric(hms("16:00:00")) & TimeStart<as.numeric(hms("18:00:00")), 1, 0), sixtoeight=ifelse(TimeStart>=as.numeric(hms("18:00:00")) & TimeStart<as.numeric(hms("20:00:00")), 1, 0), aftereight=ifelse(TimeStart >= as.numeric(hms("20:00:00")), 1, 0)) 
+
+  
+x<-glm(foodynfactor ~ tentotwelve+twelvetotwo+twotofour+fourtosix+sixtoeight+aftereight, data=statistics, family="binomial") 
+
+x%>%summary 
+
+  
+
+exp(coef(x)) 
+
+exp(confint(x)) 
+
+``` 
+
+
+```{r} 
+
+## new dataframe for logistic analysis 
+
+food_events1 <- event_df %>% select(-snack, -meal, -foodyn, -Leadership, -ODI) 
+
+multianalysis <- left_join(statistics, food_events1, by="ID") 
+multianalysis
+food_events1
+
+y<-glm(foodynfactor ~ tentotwelve+twelvetotwo+twotofour+fourtosix+sixtoeight+aftereight+Kresge+Countway+FXB+PHOffcampus, data=multianalysis, family="binomial") 
+
+y%>%summary 
+
+
+exp(coef(y)) 
+
+exp(confint(y)) 
+
+``` 
+
+
+```{r} 
+
+#Prediction with linear regression, training set and test set (JUST TIME) 
+
+ set.seed(0) 
+
+withfood<-statistics %>% filter(foodynfactor==1) %>% select(ID) %>% t() 
+
+# 138 with food 
+
+withoutfood<-statistics %>% filter(foodynfactor==0) %>% select(ID) %>% t() 
+
+# 132 without food 
+
+  
+
+#sample 80% of events with food and 80% of events without food to make training dataset  
+
+testfood<-sample(withfood, 106, replace=FALSE) 
+
+testnofood<-sample(withoutfood, 106, replace=FALSE) 
+
+trainset <- statistics %>% filter (ID %in% testfood | ID %in% testnofood)
+
+testset <- statistics %>% filter (!(ID %in% testfood) & !(ID %in% testnofood)) 
+
+  
+## train set 
+
+x<-glm(foodynfactor ~ tentotwelve+twelvetotwo+twotofour+fourtosix+sixtoeight+aftereight, data=trainset, family="binomial") 
+
+x%>%summary 
+
+library(caret) 
+
+p_hat_logit <- predict(x, newdata = testset, type="response") 
+
+y_hat_logit <- ifelse(p_hat_logit > 0.5, 1, 0) 
+
+confusionMatrix(data = as.factor(y_hat_logit), reference = testset$foodynfactor, positive="1") 
+
+
+``` 
+
+
+```{r} 
+
+trainset2 <- multianalysis %>% filter (ID %in% testfood | ID %in% testnofood) 
+
+testset2 <- multianalysis %>% filter (!(ID %in% testfood) & !(ID %in% testnofood)) 
+
+## train set 
+
+z<-glm(foodynfactor ~ tentotwelve+twelvetotwo+twotofour+fourtosix+sixtoeight+aftereight+Kresge+Countway+FXB+PHOffcampus, data=trainset2, family="binomial") 
+
+z%>%summary 
+
+p_hat_logit2 <- predict(z, newdata = testset2, type="response") 
+
+y_hat_logit2 <- ifelse(p_hat_logit2 > 0.5, 1, 0) 
+
+confusionMatrix(data = as.factor(y_hat_logit2), reference = testset2$foodynfactor, positive="1") 
+
+ ```
